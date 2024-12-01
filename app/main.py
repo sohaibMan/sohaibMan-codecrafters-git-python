@@ -1,3 +1,4 @@
+import hashlib
 import sys
 import os
 import zlib
@@ -42,6 +43,33 @@ def main():
         except zlib.error as e:
             print(f"Error decompressing the object file: {e}", file=sys.stderr)
             sys.exit(1)
+    elif command == "hash-object" and len(sys.argv) == 4 and sys.argv[2] == "-w":
+        file_name = sys.argv[3]
+        try:
+            with open(file_name, "rb") as f:
+                content = f.read()
+                header = f"blob {len(content)}\0".encode('utf-8')
+                data = header + content
+                blob_sha = hashlib.sha1(data).hexdigest()
+                compressed_data = zlib.compress(data)
+
+                object_dir = blob_sha[:2]
+                object_file = blob_sha[2:]
+
+                object_path = os.path.join(".git", "objects", object_dir, object_file)
+
+                os.makedirs(os.path.dirname(object_path))
+
+                with open(object_path, "wb") as blob_file:
+                    blob_file.write(compressed_data)
+
+                print(blob_sha)
+
+        except FileNotFoundError as e:
+            print(f"Failed to find .git/objects directory. Make sure you run 'git init' before. {e}", file=sys.stderr)
+            sys.exit(1)
+
+
 
     else:
         raise RuntimeError(f"Unknown command #{command}")
