@@ -69,7 +69,30 @@ def main():
             print(f"Failed to find .git/objects directory. Make sure you run 'git init' before. {e}", file=sys.stderr)
             sys.exit(1)
 
+    elif command == "ls-tree" and len(sys.argv) == 4 and sys.argv[2] == "--name-only":
+        tree_sha = sys.argv[3]
+        object_dir = tree_sha[:2]
+        object_file = tree_sha[2:]
+        object_path = os.path.join(".git", "objects", object_dir, object_file)
+        with open(object_path, 'rb') as f:
+            compressed_data = f.read()
+            raw = zlib.decompress(compressed_data)
+            header, content = raw.split(b"\0", maxsplit=1)
+            if not header.startswith(b"tree"):
+                raise print(f"Object file does not exist: {object_path}")
 
+            while content:
+                # Extract the mode (e.g., '100644' or '40000')
+                mode, _, content = content.partition(b' ')
+                # Extract the filename
+                filename, _, content = content.partition(b'\0')
+                # Add folders and files
+                if mode.decode() in ('100644', '40000'):
+                    # for files
+                    print(filename.decode())
+
+                # Remove the SHA-1 from the remaining content
+                content = content[20:]
 
     else:
         raise RuntimeError(f"Unknown command #{command}")
