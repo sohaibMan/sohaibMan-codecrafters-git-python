@@ -3,6 +3,8 @@ import sys
 import os
 import zlib
 
+git_ignore = '.git'
+
 
 def main():
     # You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -93,9 +95,74 @@ def main():
 
                 # Remove the SHA-1 from the remaining content
                 content = content[20:]
-
+    elif command == "write-tree":
+        print(write_tree('.'))
     else:
         raise RuntimeError(f"Unknown command #{command}")
+
+
+def write_tree(path):
+    tree_content = b''
+    git_path = os.path.join('.', '.git')
+
+    # Iterate over the files/directories in the working directory
+    for entry in sorted(os.listdir(path)):
+        if entry in git_ignore:
+            continue
+
+        full_path = os.path.join(path, entry)
+
+        isDir = os.path.isdir(full_path)
+
+        if isDir:
+            # If the entry is a directory, recursively create a tree object and record its SHA hash
+            mode = '40000'
+            sha1_hash = write_tree(full_path)
+        else:
+            # If the entry is a file, create a blob object and record its SHA hash
+            mode = '100644'
+
+            # Step 1: Read the file content
+            with open(full_path, "rb") as f:
+                file_content = f.read()
+
+            # Step 2: Prepare the blob header
+            header = f"blob {len(file_content)}\0".encode()
+
+            # Step 3: Concatenate header and content
+            blob_data = header + file_content
+
+            # Step 4: Compute the SHA-1 hash
+            sha1_hash = hashlib.sha1(blob_data).hexdigest()
+
+            # Step 4: Compute the SHA-1 hash
+            write_object(sha1_hash, blob_data, git_path)
+
+
+        tree_entry = f"{mode} {entry}\0".encode() + bytes.fromhex(sha1_hash)
+        tree_content += tree_entry
+
+    header = f"tree {len(tree_content)}\0".encode()
+    tree_object = header + tree_content
+
+    # Once you have all the entries and their SHA hashes, write the tree object to the .git/objects directory
+    tree_sha = hashlib.sha1(tree_object).hexdigest()
+
+    write_object(tree_sha, tree_object, git_path)
+
+    return tree_sha
+
+
+def write_object(sha, content, git_path):
+    """Write an object to the .git/objects directory."""
+    object_dir = os.path.join(git_path, 'objects', sha[:2])
+    if not os.path.exists(object_dir):
+        os.makedirs(object_dir)
+
+    object_path = os.path.join(object_dir, sha[2:])
+    if not os.path.exists(object_path):
+        with open(object_path, "wb") as f:
+            f.write(zlib.compress(content))
 
 
 if __name__ == "__main__":
